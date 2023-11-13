@@ -2,6 +2,12 @@
 name = "rweb"
 version = "0.0.1"
 edition = "2021"
+authors = ["A.K."]
+description = "Experiments in rust web development"
+readme = "README.md"
+repository = "https://github.com/formerlybased/rweb"
+license = "MIT"
+keywords = ["web-development", "web-server"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
