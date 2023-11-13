@@ -36,11 +36,11 @@ impl View {
         } else {
             web_path = format!("{}", path.strip_prefix("./pages").unwrap().strip_suffix(".html").unwrap().to_string());
         }
+
         let content = fs::read(path).await;
         let stylesheet = fs::read("theme.css").await;
         let source = generate_view(String::from_utf8(content.unwrap()).unwrap(), String::from_utf8(stylesheet.unwrap()).unwrap()); // TODO:
         // add proper header and footer stuff
-
 
         View {
             web_path,
@@ -165,6 +165,8 @@ fn create_project(dir: Option<String>) {
     std::fs::write(dir.clone() + "/404.html", "<h1>404 Page!</h1>").unwrap();
     std::fs::write(dir.clone() + "/theme.css", "/* Add your style here */").unwrap();
     std::fs::create_dir(dir.clone() + "/pages/").unwrap();
+
+    println!("Project created at {}/", dir);
 }
 
 async fn shutdown_signal_await() {
