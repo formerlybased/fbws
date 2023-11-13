@@ -1,12 +1,8 @@
 use clap::{Parser, Subcommand};
 
-use tokio::fs::File;
 use tokio::fs;
-use tokio::sync::futures;
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-
-use tokio_util::codec::{BytesCodec, FramedRead};
 
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Result, Server, StatusCode};
@@ -41,8 +37,10 @@ impl View {
             web_path = format!("{}", path.strip_prefix("./pages").unwrap().strip_suffix(".html").unwrap().to_string());
         }
         let content = fs::read(path).await;
-        let source = generate_view(String::from_utf8(content.unwrap()).unwrap(), String::from("")); // TODO:
+        let stylesheet = fs::read("theme.css").await;
+        let source = generate_view(String::from_utf8(content.unwrap()).unwrap(), String::from_utf8(stylesheet.unwrap()).unwrap()); // TODO:
         // add proper header and footer stuff
+
 
         View {
             web_path,
@@ -52,14 +50,16 @@ impl View {
 
 }
 
-fn generate_view(src: String, header: String) -> String {
+fn generate_view(src: String, theme: String) -> String {
     return format!("
+    <style>\n
+    {theme}\n
+    </style>\n
     <html>\n
     <head>\n
     <title>Website</title>\n
     </head>\n
     <body>\n
-    {header}\n
     {src}\n
     </body>\n
     </html>
@@ -163,6 +163,7 @@ fn create_project(dir: Option<String>) {
     std::fs::create_dir(dir.clone()).unwrap();
     std::fs::write(dir.clone() + "/home.html", "<h1>Home page!</h1>").unwrap();
     std::fs::write(dir.clone() + "/404.html", "<h1>404 Page!</h1>").unwrap();
+    std::fs::write(dir.clone() + "/theme.css", "/* Add your style here */").unwrap();
     std::fs::create_dir(dir.clone() + "/pages/").unwrap();
 }
 
