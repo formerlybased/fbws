@@ -1,5 +1,5 @@
 [package]
-name = "rweb"
+name = "formerlybased-web-server"
 version = "0.0.1"
 edition = "2021"
 authors = ["A.K."]
