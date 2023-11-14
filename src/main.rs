@@ -1,3 +1,5 @@
+use config::{Config, File};
+
 use clap::{Parser, Subcommand};
 
 use tokio::fs;
@@ -26,9 +28,8 @@ struct View {
     source: String,
 }
 
-
 impl View {
-    async fn build(path: String) -> View {
+    async fn build(path: String, theme: String) -> View {
         let web_path: String;
 
         if path.strip_prefix("./pages") == None {
@@ -38,8 +39,8 @@ impl View {
         }
 
         let content = fs::read(path).await;
-        let stylesheet = fs::read("theme.css").await;
-        let source = generate_view(String::from_utf8(content.unwrap()).unwrap(), String::from_utf8(stylesheet.unwrap()).unwrap()); // TODO:
+        let stylesheet = fs::read(theme).await;
+        let source = generate_view(String::from_utf8(content.unwrap()).unwrap(), String::from_utf8(stylesheet.unwrap()).unwrap(), String::from(web_path.clone().strip_prefix("/").unwrap())); // TODO:
         // add proper header and footer stuff
 
         View {
@@ -50,14 +51,14 @@ impl View {
 
 }
 
-fn generate_view(src: String, theme: String) -> String {
+fn generate_view(src: String, theme: String, title: String) -> String {
     return format!("
     <style>\n
     {theme}\n
     </style>\n
     <html>\n
     <head>\n
-    <title>Website</title>\n
+    <title>{title}</title>\n
     </head>\n
     <body>\n
     {src}\n
@@ -77,14 +78,19 @@ fn main() {
             create_project(name.to_owned());
         }
         None => {
-            println!("Usage: rweb [command]\nUse --help for help");
+            println!("Usage: fbws [command]\nUse --help for help");
         }
     }
 }
 
 #[tokio::main]
 async fn run_server() {
-    let views: Vec<View> = make_views().await.unwrap();
+    let conf = Config::builder()
+        .add_source(File::with_name("project.toml"))
+        .build()
+        .unwrap();
+
+    let views: Vec<View> = make_views(conf.get::<String>("theme").unwrap()).await.unwrap();
 
     let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
 
@@ -108,11 +114,11 @@ async fn run_server() {
     println!("\nServer shutdown...");
 }
 
-async fn make_views() -> std::io::Result<Vec<View>> {
+async fn make_views(theme: String) -> std::io::Result<Vec<View>> {
     let mut views: Vec<View> = Vec::new();
-    let home_view = View::build(String::from("home.html")).await;
+    let home_view = View::build(String::from("home.html"), theme.clone()).await;
     views.push(home_view);
-    let error_view = View::build(String::from("404.html")).await;
+    let error_view = View::build(String::from("404.html"), theme.clone()).await;
     views.push(error_view);
 
     for f in std::fs::read_dir("./pages")? {
@@ -121,7 +127,7 @@ async fn make_views() -> std::io::Result<Vec<View>> {
             break;
         }
         let file_path = file_path.into_os_string().into_string().unwrap();
-        views.push(View::build(file_path).await);
+        views.push(View::build(file_path, theme.clone()).await);
     }
 
     Ok(views)
@@ -140,7 +146,7 @@ async fn route(views: &Vec<View>, path: String) -> Response<Body> {
         if v.web_path == path { return send_view(&v).await.unwrap() };
     }
 
-    return send_view(&views[1]).await.unwrap()
+    return handle_404(&views[1])
 }
 
 fn handle_404(view: &View) -> Response<Body> {
@@ -156,7 +162,7 @@ async fn send_view(v: &View) -> Result<Response<Body>> {
 
 fn create_project(dir: Option<String>) {
     if dir == None {
-        println!("Usage: rweb new <directory>");
+        println!("Usage: fbws new <project-name>");
         return
     }
     let dir: String = dir.unwrap();
@@ -164,6 +170,7 @@ fn create_project(dir: Option<String>) {
     std::fs::write(dir.clone() + "/home.html", "<h1>Home page!</h1>").unwrap();
     std::fs::write(dir.clone() + "/404.html", "<h1>404 Page!</h1>").unwrap();
     std::fs::write(dir.clone() + "/theme.css", "/* Add your style here */").unwrap();
+    std::fs::write(dir.clone() + "/project.toml", format!("title = \"{}\"\ntheme = \"theme.css\"", dir.clone())).unwrap();
     std::fs::create_dir(dir.clone() + "/pages/").unwrap();
 
     println!("Project created at {}/", dir);
