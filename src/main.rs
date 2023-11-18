@@ -1,4 +1,4 @@
-use config::{Config, File};
+use config::{Config, File };
 
 use clap::{Parser, Subcommand};
 
@@ -29,7 +29,7 @@ struct View {
 }
 
 impl View {
-    async fn build(path: String, theme: String) -> View {
+    async fn build(path: String, theme: String, web_title: String, header_source: String) -> View {
         let web_path: String;
 
         if path.strip_prefix("./pages") == None {
@@ -40,8 +40,8 @@ impl View {
 
         let content = fs::read(path).await;
         let stylesheet = fs::read(theme).await;
-        let source = generate_view(String::from_utf8(content.unwrap()).unwrap(), String::from_utf8(stylesheet.unwrap()).unwrap(), String::from(web_path.clone().strip_prefix("/").unwrap())); // TODO:
-        // add proper header and footer stuff
+        let header = fs::read(header_source).await;
+        let source = generate_view(String::from_utf8(content.unwrap()).unwrap(), String::from_utf8(stylesheet.unwrap()).unwrap(), format!("{} on {}", web_path.clone().strip_prefix("/").unwrap(), web_title), String::from_utf8(header.unwrap()).unwrap()); // TODO:
 
         View {
             web_path,
@@ -51,7 +51,7 @@ impl View {
 
 }
 
-fn generate_view(src: String, theme: String, title: String) -> String {
+fn generate_view(src: String, theme: String, title: String, header: String) -> String {
     return format!("
     <style>\n
     {theme}\n
@@ -61,6 +61,9 @@ fn generate_view(src: String, theme: String, title: String) -> String {
     <title>{title}</title>\n
     </head>\n
     <body>\n
+    <header>\n
+    {header}\n
+    </header>\n
     {src}\n
     </body>\n
     </html>
@@ -85,14 +88,18 @@ fn main() {
 
 #[tokio::main]
 async fn run_server() {
-    let conf = Config::builder()
+    let conf_result = Config::builder()
         .add_source(File::with_name("project.toml"))
-        .build()
-        .unwrap();
+        .build();
+    
+    let conf = match conf_result {
+        Ok(config) => config,
+        Err(config_error) => panic!("Not a valid FBWS project!\n Error: {}", config_error )
+    };
 
-    let views: Vec<View> = make_views(conf.get::<String>("theme").unwrap()).await.unwrap();
+    let views: Vec<View> = make_views(String::from("./pages"), conf.get::<String>("theme").expect("Theme configuration unset"), conf.get::<String>("title").expect("Project needs a valid title"), conf.get::<String>("header").expect("Header path required (even if unused)")).await.unwrap();
 
-    let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+    let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), conf.get::<u16>("port").expect("Port configuration unset"));
 
     let service = make_service_fn(move |_| { 
         let views = views.clone();
@@ -114,20 +121,20 @@ async fn run_server() {
     println!("\nServer shutdown...");
 }
 
-async fn make_views(theme: String) -> std::io::Result<Vec<View>> {
+async fn make_views(dir: String, theme: String, web_title: String, header: String) -> std::io::Result<Vec<View>> {
     let mut views: Vec<View> = Vec::new();
-    let home_view = View::build(String::from("home.html"), theme.clone()).await;
+    let home_view = View::build(String::from("home.html"), theme.clone(), web_title.clone(), header.clone()).await;
     views.push(home_view);
-    let error_view = View::build(String::from("404.html"), theme.clone()).await;
+    let error_view = View::build(String::from("404.html"), theme.clone(), web_title.clone(), header.clone()).await;
     views.push(error_view);
 
-    for f in std::fs::read_dir("./pages")? {
+    for f in std::fs::read_dir(dir.clone())? {
         let file_path = f?.path();
         if file_path.is_dir() {
             break;
         }
         let file_path = file_path.into_os_string().into_string().unwrap();
-        views.push(View::build(file_path, theme.clone()).await);
+        views.push(View::build(file_path, theme.clone(), web_title.clone(), header.clone()).await);
     }
 
     Ok(views)
@@ -170,7 +177,8 @@ fn create_project(dir: Option<String>) {
     std::fs::write(dir.clone() + "/home.html", "<h1>Home page!</h1>").unwrap();
     std::fs::write(dir.clone() + "/404.html", "<h1>404 Page!</h1>").unwrap();
     std::fs::write(dir.clone() + "/theme.css", "/* Add your style here */").unwrap();
-    std::fs::write(dir.clone() + "/project.toml", format!("title = \"{}\"\ntheme = \"theme.css\"", dir.clone())).unwrap();
+    std::fs::write(dir.clone() + "/header.html", "<!--Use this file to add a header across all pages-->").unwrap();
+    std::fs::write(dir.clone() + "/project.toml", format!("title = \"{}\"\ntheme = \"theme.css\"\nport = 8080\nheader = \"header.html\"", dir.clone())).unwrap();
     std::fs::create_dir(dir.clone() + "/pages/").unwrap();
 
     println!("Project created at {}/", dir);
@@ -181,4 +189,3 @@ async fn shutdown_signal_await() {
         .await
         .expect("Failed to attach ctrl-c handler");
 }
-
