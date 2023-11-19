@@ -11,7 +11,11 @@ mod view;
 use crate::view::View;
 
 #[derive(Parser)]
-#[command(author, version, about)]
+#[command(
+    author,
+    version,
+    about = "Static page generator & web server written in rust"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
